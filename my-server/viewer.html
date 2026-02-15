@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Просмотр текстового файла</title>
+    <style>
+        body {
+            font-family: monospace;
+            text-align: center;
+            background: #1e1e2f;
+            color: #fff;
+            margin-top: 50px;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+        .info {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+        table {
+            margin: 0 auto;
+            border-collapse: collapse;
+            background: #2d2d3f;
+            border: 2px solid #aaa;
+        }
+        td {
+            width: 50px;
+            height: 50px;
+            text-align: center;
+            font-size: 24px;
+            border: 1px solid #555;
+            color: #0ff;
+        }
+        .center {
+            border: 3px solid #ffaa00;
+            background: #3a3a5f;
+        }
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        button {
+            background: #4a4a6a;
+            color: white;
+            border: none;
+            font-size: 24px;
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #6a6a8a;
+        }
+        .coords {
+            font-size: 1.2rem;
+            margin-top: 20px;
+            color: #ffaa00;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Исследователь файла</h1>
+    <div class="info">Центр окна выделен жёлтой рамкой</div>
+    <div class="coords" id="coords">Строка: 5, Колонка: 5</div>
+
+    <table id="grid">
+        <tr><td id="cell00">?</td><td id="cell01">?</td><td id="cell02">?</td></tr>
+        <tr><td id="cell10">?</td><td id="cell20">?</td><td id="cell12">?</td></tr>
+        <tr><td id="cell20">?</td><td id="cell21">?</td><td id="cell22">?</td></tr>
+    </table>
+
+    <div class="controls">
+        <button id="up">↑</button>
+        <button id="left">←</button>
+        <button id="down">↓</button>
+        <button id="right">→</button>
+    </div>
+
+    <script>
+        let currentRow = 5;
+        let currentCol = 5;
+
+        const gridIds = [
+            ['cell00', 'cell01', 'cell02'],
+            ['cell10', 'cell11', 'cell12'],
+            ['cell20', 'cell21', 'cell22']
+        ];
+
+        async function fetchWindow(row, col) {
+            const url = `/api/window?row=${row}&col=${col}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Ошибка сервера');
+                const data = await response.json();
+                updateGrid(data.window);
+                document.getElementById('coords').innerText = `Строка: ${data.centerRow}, Колонка: ${data.centerCol}`;
+            } catch (err) {
+                console.error(err);
+                alert('Не удалось загрузить данные');
+            }
+        }
+
+        function updateGrid(windowMatrix) {
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    const cell = document.getElementById(gridIds[r][c]);
+                    cell.textContent = windowMatrix[r][c];
+                    // Убираем класс center у всех
+                    cell.classList.remove('center');
+                }
+            }
+            // Центральная ячейка (индексы 1,1)
+            document.getElementById('cell11').classList.add('center');
+        }
+
+        // Обработчики кнопок
+        document.getElementById('up').addEventListener('click', () => {
+            currentRow = Math.max(1, currentRow - 1);
+            fetchWindow(currentRow, currentCol);
+        });
+        document.getElementById('down').addEventListener('click', () => {
+            currentRow = currentRow + 1;
+            fetchWindow(currentRow, currentCol);
+        });
+        document.getElementById('left').addEventListener('click', () => {
+            currentCol = Math.max(1, currentCol - 1);
+            fetchWindow(currentRow, currentCol);
+        });
+        document.getElementById('right').addEventListener('click', () => {
+            currentCol = currentCol + 1;
+            fetchWindow(currentRow, currentCol);
+        });
+
+        // Клавиши стрелок
+        window.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                    e.preventDefault();
+                    currentRow = Math.max(1, currentRow - 1);
+                    fetchWindow(currentRow, currentCol);
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    currentRow = currentRow + 1;
+                    fetchWindow(currentRow, currentCol);
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    currentCol = Math.max(1, currentCol - 1);
+                    fetchWindow(currentRow, currentCol);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    currentCol = currentCol + 1;
+                    fetchWindow(currentRow, currentCol);
+                    break;
+            }
+        });
+
+        // Загружаем начальное окно
+        fetchWindow(currentRow, currentCol);
+    </script>
+</body>
+</html>
