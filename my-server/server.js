@@ -23,7 +23,7 @@ app.get('/api/random-code', (req, res) => {
         }
 
         res.json({
-            code: stripComments(code),
+            code: normalizeForGame(stripComments(code)),
             language: detectLanguage(randomPath)
         });
     });
@@ -76,12 +76,23 @@ function collectSourceFiles(rootDir) {
             if (!entry.isFile()) continue;
             const ext = path.extname(entry.name).toLowerCase();
             if (!allowedExtensions.has(ext)) continue;
+            if (countLines(fullPath) < 50) continue;
             files.push(fullPath);
         }
     }
 
     walk(rootDir);
     return files;
+}
+
+function countLines(filePath) {
+    try {
+        const text = fs.readFileSync(filePath, 'utf8');
+        if (text.length === 0) return 0;
+        return text.split(/\r?\n/).length;
+    } catch {
+        return 0;
+    }
 }
 
 function stripComments(text) {
@@ -98,6 +109,32 @@ function stripComments(text) {
         .join('\n');
 
     return result;
+}
+
+function normalizeTabs(text) {
+    return text.replace(/\t/g, '    ');
+}
+
+function normalizeForGame(text) {
+    const withSpaces = normalizeTabs(text);
+    const lines = withSpaces.split(/\r?\n/);
+
+    // Drop empty lines at file edges to avoid large blank margins.
+    while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+    while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+    if (lines.length === 0) return '';
+
+    // Remove common left indentation while preserving relative nesting.
+    let minIndent = Infinity;
+    for (const line of lines) {
+        if (line.trim() === '') continue;
+        const match = line.match(/^ */);
+        const indent = match ? match[0].length : 0;
+        if (indent < minIndent) minIndent = indent;
+    }
+    if (!Number.isFinite(minIndent)) minIndent = 0;
+
+    return lines.map(line => line.slice(Math.min(minIndent, line.length))).join('\n');
 }
 
 function detectLanguage(filePath) {

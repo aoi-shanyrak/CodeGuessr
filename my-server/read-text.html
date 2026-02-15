@@ -159,16 +159,25 @@
             background: #131f3e;
             border-radius: 8px;
             padding: 10px;
-            overflow: auto;
-            max-height: 360px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            width: min(72vw, 560px);
+            aspect-ratio: 1 / 1;
+            max-height: 560px;
             display: flex;
             justify-content: center;
+            align-items: center;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .context-block-content {
             min-width: max-content;
             line-height: 1.5;
             text-align: left;
+            white-space: pre;
+            font-variant-ligatures: none;
+            margin: 0 auto;
         }
 
         .row-prefix {
@@ -216,6 +225,13 @@
         .choices button.correct {
             background: rgba(34, 197, 94, 0.18);
             border-color: rgba(34, 197, 94, 0.7);
+        }
+
+        .choices button.reveal {
+            background: rgba(245, 158, 11, 0.25);
+            border-color: rgba(245, 158, 11, 0.85);
+            color: #ffe8b5;
+            font-weight: 700;
         }
 
         .choices button.wrong {
@@ -411,8 +427,9 @@
     </main>
 
     <script>
-        const RADIUS = 5;
-        const VERTICAL_RADIUS = 5;
+        const FLASHLIGHT_HEIGHT = 11;
+        const HORIZONTAL_RADIUS = 14; // 29 chars width for a larger near-square flashlight window
+        const VERTICAL_RADIUS = Math.floor(FLASHLIGHT_HEIGHT / 2);
         const ROUND_SECONDS = 25;
         const LEADERBOARD_KEY = 'codeguessr_leaderboard_v1';
         const LANGUAGE_OPTIONS = [
@@ -449,7 +466,8 @@
             topVisible: false,
             lastGuessResult: null,
             leaderboard: {},
-            leaderboardLanguage: 'JavaScript'
+            leaderboardLanguage: 'JavaScript',
+            attemptsUsed: 0
         };
 
         const statusEl = document.getElementById('status');
@@ -517,8 +535,10 @@
                 }
 
                 if (ch === '#') {
+                    const language = state.language.toLowerCase();
+                    const pythonStyleHashComment = language === 'python';
                     const prev = i > 0 ? line[i - 1] : ' ';
-                    if (/\s/.test(prev) || i === 0) {
+                    if (pythonStyleHashComment || /\s/.test(prev) || i === 0) {
                         tokens.push({ type: 'comment', text: line.slice(i), start: i, end: line.length });
                         break;
                     }
@@ -587,6 +607,22 @@
             const cls = tokenClass(type);
             if (!cls) return escapeHtml(text);
             return `<span class="${cls}">${escapeHtml(text)}</span>`;
+        }
+
+        function buildFlashlightWindow(line, centerCol, radius) {
+            const width = radius * 2 + 1;
+            let out = '';
+
+            for (let i = 0; i < width; i += 1) {
+                const absoluteCol = centerCol - radius + i;
+                if (absoluteCol < 0 || absoluteCol >= line.length) {
+                    out += ' ';
+                } else {
+                    out += line[absoluteCol];
+                }
+            }
+
+            return out;
         }
 
         function renderHighlightedSegment(segment, focusIndex, forceCursor = false) {
@@ -767,24 +803,13 @@
                 const rawLine = state.lines[row];
                 const marker = row === state.line ? '>' : ' ';
                 const rowNum = String(row + 1).padStart(4, ' ');
-
-                if (rawLine.length === 0 || state.col >= rawLine.length) {
-                    if (row === state.line) {
-                        rows.push(`<div><span class="row-prefix">${escapeHtml(`${marker}${rowNum} | `)}</span><span class="current">&nbsp;</span></div>`);
-                    } else {
-                        rows.push(`<div><span class="row-prefix">${escapeHtml(`${marker}${rowNum} | `)}</span></div>`);
-                    }
-                    continue;
-                }
-
-                const center = state.col;
-                const fromCol = Math.max(0, center - RADIUS);
-                const toCol = Math.min(rawLine.length, center + RADIUS + 1);
-                const local = rawLine.slice(fromCol, toCol);
+                const prefix = `${marker}${rowNum} | `;
+                const suffix = ' '.repeat(prefix.length);
+                const local = buildFlashlightWindow(rawLine, state.col, HORIZONTAL_RADIUS);
                 const localHtml = row === state.line
-                    ? renderHighlightedSegment(local, center - fromCol, true)
+                    ? renderHighlightedSegment(local, HORIZONTAL_RADIUS, true)
                     : renderHighlightedSegment(local, -1, false);
-                rows.push(`<div><span class="row-prefix">${escapeHtml(`${marker}${rowNum} | `)}</span>${localHtml}</div>`);
+                rows.push(`<div><span class="row-prefix">${escapeHtml(prefix)}</span>${localHtml}${escapeHtml(suffix)}</div>`);
             }
 
             contextBlockEl.innerHTML =
@@ -803,7 +828,7 @@
             }
         }
 
-        function finishRound(correct, guessed) {
+        function finishRound(correct, guessed, reason = '') {
             state.roundActive = false;
             stopTimer();
 
@@ -817,15 +842,22 @@
                 answerEl.textContent = `Ответ: ${state.language}`;
             } else {
                 state.streak = 0;
-                renderStatus('Время вышло', 'bad');
-                answerEl.textContent = `Ответ: ${state.language}`;
+                if (reason === 'attempts') {
+                    renderStatus('3 попытки закончились. Раунд: 0 очков', 'bad');
+                } else {
+                    renderStatus('Время вышло. Раунд: 0 очков', 'bad');
+                }
+                answerEl.textContent = `Ответ: ${state.language} (0 очков)`;
             }
 
             for (const btn of choicesEl.querySelectorAll('button')) {
                 const lang = btn.getAttribute('data-lang');
-                btn.classList.remove('correct', 'wrong');
-                if (lang === state.language) btn.classList.add('correct');
-                else if (lang === guessed) btn.classList.add('wrong');
+                btn.classList.remove('correct', 'wrong', 'reveal');
+                if (lang === state.language) {
+                    btn.classList.add(correct ? 'correct' : 'reveal');
+                } else if (lang === guessed) {
+                    btn.classList.add('wrong');
+                }
             }
 
             renderHud();
@@ -840,7 +872,7 @@
                 if (state.timeLeft <= 0) {
                     state.timeLeft = 0;
                     renderHud();
-                    finishRound(false, null);
+                    finishRound(false, null, 'time');
                     return;
                 }
                 renderHud();
@@ -855,10 +887,8 @@
                 return;
             }
 
-            state.score = Math.max(0, state.score - 20);
-            state.timeLeft = Math.max(1, state.timeLeft - 2);
-            state.streak = 0;
-            renderStatus(`Нет, это не ${lang}. -20 очков, -2с`, 'bad');
+            state.attemptsUsed += 1;
+            const attemptsLeft = Math.max(0, 3 - state.attemptsUsed);
 
             for (const btn of choicesEl.querySelectorAll('button')) {
                 const val = btn.getAttribute('data-lang');
@@ -866,7 +896,12 @@
                 if (val === lang) btn.classList.add('wrong');
             }
 
-            renderHud();
+            if (state.attemptsUsed >= 3) {
+                finishRound(false, lang, 'attempts');
+                return;
+            }
+
+            renderStatus(`Нет, это не ${lang}. Осталось попыток: ${attemptsLeft}`, 'bad');
         }
 
         function moveLeft() {
@@ -922,6 +957,7 @@
                     state.round += 1;
                     state.timeLeft = ROUND_SECONDS;
                     state.roundActive = true;
+                    state.attemptsUsed = 0;
                     setRandomStartPosition();
 
                     renderChoices();
@@ -972,7 +1008,7 @@
         });
 
         window.addEventListener('keydown', (event) => {
-            if (event.key.toLowerCase() === 'n') {
+            if (event.code === 'KeyN' || event.key.toLowerCase() === 'n') {
                 event.preventDefault();
                 loadRandomCode();
             }
