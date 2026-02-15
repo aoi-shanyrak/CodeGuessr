@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>5-й символ 5-й строки</title>
+</head>
+<body>
+    <h1>Результат:</h1>
+    <pre id="output">Загрузка...</pre>
+
+    <script>
+        fetch('data.txt')
+            .then(response => {
+                if (!response.ok) throw new Error('Файл не найден');
+                return response.text();
+            })
+            .then(text => {
+                // Разбиваем на строки (учитываем \n и \r\n)
+                const lines = text.split(/\r?\n/);
+
+                // Проверяем, есть ли хотя бы 5 строк
+                if (lines.length < 5) {
+                    document.getElementById('output').textContent =
+                        'Ошибка: в файле меньше 5 строк.';
+                    return;
+                }
+
+                // Берём 5-ю строку (индекс 4)
+                const fifthLine = lines[4];
+
+                // Проверяем длину строки (нужно минимум 5 символов)
+                if (fifthLine.length < 5) {
+                    document.getElementById('output').textContent =
+                        'Ошибка: 5-я строка содержит меньше 5 символов.';
+                    return;
+                }
+
+                // Извлекаем 5-й символ (индекс 4)
+                const fifthChar = fifthLine[4]; // или fifthLine.charAt(4)
+
+                document.getElementById('output').textContent =
+                    `5-й символ 5-й строки: "${fifthChar}"`;
+            })
+            .catch(error => {
+                document.getElementById('output').textContent =
+                    'Ошибка: ' + error.message;
+            });
+    </script>
+</body>
+</html>
