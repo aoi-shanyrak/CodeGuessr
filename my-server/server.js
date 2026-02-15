@@ -54,7 +54,7 @@ function collectSourceFiles(rootDir) {
     const allowedExtensions = new Set([
         '.js', '.ts', '.py', '.rb', '.java', '.kt', '.kts', '.cs',
         '.c', '.h', '.hpp', '.cpp', '.cc', '.cxx', '.php', '.rs',
-        '.swift', '.go', '.lua'
+        '.swift', '.go', '.lua', '.hs', '.scala', '.dart', '.ex', '.clj', '.ml', '.groovy', '.jl', '.nim', '.zig'
     ]);
 
     function walk(currentDir) {
@@ -158,7 +158,17 @@ function detectLanguage(filePath) {
         '.rs': 'Rust',
         '.swift': 'Swift',
         '.go': 'Go',
-        '.lua': 'Lua'
+        '.lua': 'Lua',
+        '.hs': 'Haskell',
+        '.scala': 'Scala',
+        '.dart': 'Dart',
+        '.ex': 'Elixir',
+        '.clj': 'Clojure',
+        '.ml': 'OCaml',
+        '.groovy': 'Groovy',
+        '.jl': 'Julia',
+        '.nim': 'Nim',
+        '.zig': 'Zig'
     };
 
     return extMap[ext] || 'Unknown';
