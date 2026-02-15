@@ -4,5 +4,11 @@
     "usernameLower": "near8954",
     "passwordHash": "d92f652f0ba5996d8945fb912776b801:9d2b7bccc05aed66a90e6adb08a5e1088689b7e2b771133a0ad7c1f05f63080d0c39052742815ea23ebd8fcc2d939e032d203b775d194eabe999186cc033c244",
     "createdAt": 1771146886938
+  },
+  {
+    "username": "aoi",
+    "usernameLower": "aoi",
+    "passwordHash": "2f3d47295cf89a963dfa8c3938c750e7:7e3c45d9cc3f94d8917fb7a406b15ac1c95edd8a86137eff305e13d7d9a04edc1163f2e976e15b1c9ce635a7cbfc21352acf589c5f3cc28fb4267604dab7150b",
+    "createdAt": 1771150759254
   }
 ]
