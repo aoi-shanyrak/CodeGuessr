@@ -159,7 +159,7 @@
             border-radius: 8px;
             padding: 10px;
             overflow-y: auto;
-            overflow-x: hidden;
+            overflow-x: auto; /* NEW: добавлен горизонтальный скролл */
             width: min(72vw, 560px);
             aspect-ratio: 1 / 1;
             max-height: 560px;
@@ -374,7 +374,7 @@
         <section class="top">
             <div>
                 <h1 class="title">CodeGuessr Arena</h1>
-                <p class="sub">Определи язык как можно быстрее. Навигация: <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span>, новый раунд: <span class="kbd">N</span></p>
+                <p class="sub">Определи язык как можно быстрее. Навигация: <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span>, новый раунд: <span class="kbd">N</span>, размер окна: <span class="kbd">Shift+↑</span> / <span class="kbd">Shift+↓</span></p>
             </div>
             <div class="meta">
                 <span class="chip">Раунд: <b id="roundChip">0</b></span>
@@ -426,10 +426,12 @@
     </main>
 
     <script>
-        const FLASHLIGHT_HEIGHT = 11;
-        const HORIZONTAL_RADIUS = 14; // 29 chars width for a larger near-square flashlight window
-        const FLASHLIGHT_WIDTH = HORIZONTAL_RADIUS * 2 + 1;
-        const VERTICAL_RADIUS = Math.floor(FLASHLIGHT_HEIGHT / 2);
+        // NEW: убраны глобальные константы размеров, они перенесены в state
+        const FLASHLIGHT_HEIGHT = 11;  // больше не используется
+        const HORIZONTAL_RADIUS = 14;  // не используется
+        const VERTICAL_RADIUS = Math.floor(FLASHLIGHT_HEIGHT / 2); // не используется
+        const FLASHLIGHT_WIDTH = HORIZONTAL_RADIUS * 2 + 1; // не используется
+
         const ROUND_SECONDS = 25;
         const MAX_ATTEMPTS = 3;
         const LEADERBOARD_KEY = 'codeguessr_leaderboard_v1';
@@ -468,7 +470,10 @@
             topVisible: false,
             leaderboard: {},
             leaderboardLanguage: 'JavaScript',
-            attemptsUsed: 0
+            attemptsUsed: 0,
+            // NEW: параметры размера окна
+            horzRadius: 14,
+            vertRadius: 5
         };
 
         const statusEl = document.getElementById('status');
@@ -610,10 +615,12 @@
             return `<span class="${cls}">${escapeHtml(text)}</span>`;
         }
 
+        // NEW: функция buildFlashlightWindow теперь принимает радиус как аргумент
         function buildFlashlightWindow(line, centerCol, radius) {
+            const width = radius * 2 + 1;
             let out = '';
 
-            for (let i = 0; i < FLASHLIGHT_WIDTH; i += 1) {
+            for (let i = 0; i < width; i += 1) {
                 const absoluteCol = centerCol - radius + i;
                 if (absoluteCol < 0 || absoluteCol >= line.length) {
                     out += ' ';
@@ -809,8 +816,9 @@
                 lineEl.innerHTML = '<span class="current">&nbsp;</span>';
             }
 
-            const top = Math.max(0, state.line - VERTICAL_RADIUS);
-            const bottom = Math.min(state.lines.length - 1, state.line + VERTICAL_RADIUS);
+            // NEW: используем state.vertRadius для определения вертикальных границ
+            const top = Math.max(0, state.line - state.vertRadius);
+            const bottom = Math.min(state.lines.length - 1, state.line + state.vertRadius);
             const rows = [];
 
             for (let row = top; row <= bottom; row += 1) {
@@ -819,9 +827,10 @@
                 const rowNum = String(row + 1).padStart(4, ' ');
                 const prefix = `${marker}${rowNum} | `;
                 const suffix = ' '.repeat(prefix.length);
-                const local = buildFlashlightWindow(rawLine, state.col, HORIZONTAL_RADIUS);
+                // NEW: передаём текущий горизонтальный радиус
+                const local = buildFlashlightWindow(rawLine, state.col, state.horzRadius);
                 const localHtml = row === state.line
-                    ? renderHighlightedSegment(local, HORIZONTAL_RADIUS, true)
+                    ? renderHighlightedSegment(local, state.horzRadius, true)
                     : renderHighlightedSegment(local, -1, false);
                 rows.push(`<div><span class="row-prefix">${escapeHtml(prefix)}</span>${localHtml}${escapeHtml(suffix)}</div>`);
             }
@@ -939,6 +948,16 @@
             state.col = state.preferredCol;
         }
 
+        // NEW: изменение размера окна
+        function changeFlashlightSize(deltaHorz, deltaVert) {
+            const newHorz = state.horzRadius + deltaHorz;
+            const newVert = state.vertRadius + deltaVert;
+            if (newHorz < 1 || newHorz > 30 || newVert < 1 || newVert > 15) return; // разумные пределы
+            state.horzRadius = newHorz;
+            state.vertRadius = newVert;
+            renderCode();
+        }
+
         function setRandomStartPosition() {
             if (state.lines.length === 0) {
                 state.line = 0;
@@ -1012,6 +1031,20 @@
                 event.preventDefault();
                 loadRandomCode();
                 return;
+            }
+
+            // NEW: обработка Shift+стрелки для изменения размера окна
+            if (event.shiftKey) {
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    changeFlashlightSize(1, 1);
+                    return;
+                }
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    changeFlashlightSize(-1, -1);
+                    return;
+                }
             }
 
             const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
