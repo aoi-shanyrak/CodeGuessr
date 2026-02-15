@@ -246,6 +246,50 @@
             margin-bottom: 10px;
         }
 
+        .auth-box {
+            border: 1px solid #4361a2;
+            background: #132244;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .auth-title {
+            margin: 0 0 8px;
+            font-size: 13px;
+            color: #d8e3ff;
+        }
+
+        .auth-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .auth-input {
+            width: 100%;
+            border: 1px solid #38508c;
+            background: #0f1a36;
+            color: #eaf0ff;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font: inherit;
+        }
+
+        .auth-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .auth-user {
+            font-size: 12px;
+            color: #9fd5ff;
+            min-height: 16px;
+        }
+
         .timer-head {
             display: flex;
             justify-content: space-between;
@@ -316,7 +360,7 @@
 
         .leaderboard-row {
             display: grid;
-            grid-template-columns: 34px 1fr auto auto;
+            grid-template-columns: 34px 1fr 70px 70px 1fr;
             gap: 8px;
             padding: 7px 8px;
             font-size: 12px;
@@ -374,7 +418,7 @@
         <section class="top">
             <div>
                 <h1 class="title">CodeGuessr Arena</h1>
-                <p class="sub">Определи язык как можно быстрее. Навигация: <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span>, новый раунд: <span class="kbd">N</span>, размер окна: <span class="kbd">Shift+↑</span> / <span class="kbd">Shift+↓</span></p>
+                <p class="sub">Определи язык как можно быстрее. Навигация: <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span>, новый раунд: <span class="kbd">N</span></p>
             </div>
             <div class="meta">
                 <span class="chip">Раунд: <b id="roundChip">0</b></span>
@@ -401,6 +445,20 @@
             </section>
 
             <aside class="panel">
+                <div class="auth-box">
+                    <p class="auth-title">Аккаунт</p>
+                    <div class="auth-row">
+                        <input id="authUsername" class="auth-input" type="text" autocomplete="username" placeholder="Логин">
+                        <input id="authPassword" class="auth-input" type="password" autocomplete="current-password" placeholder="Пароль">
+                    </div>
+                    <div class="auth-actions">
+                        <button id="registerBtn" type="button">Регистрация</button>
+                        <button id="loginBtn" type="button">Вход</button>
+                        <button id="logoutBtn" type="button">Выход</button>
+                    </div>
+                    <div id="authUser" class="auth-user">Не авторизован</div>
+                </div>
+
                 <div class="timer">
                     <div class="timer-head">
                         <span>Осталось времени</span>
@@ -415,26 +473,20 @@
 
                 <div class="leaderboard">
                     <div class="leaderboard-head">
-                        <p class="leaderboard-title">Лидеры по языку</p>
+                        <p class="leaderboard-title">Общий лидерборд</p>
                         <select id="leaderboardLanguage"></select>
                     </div>
                     <div id="leaderboardList" class="leaderboard-list"></div>
-                    <button id="clearLeaderboardBtn" class="leaderboard-clear" type="button">Очистить таблицу</button>
+                    <button id="clearLeaderboardBtn" class="leaderboard-clear" type="button">Очистить мои результаты</button>
                 </div>
             </aside>
         </section>
     </main>
 
     <script>
-        // NEW: убраны глобальные константы размеров, они перенесены в state
-        const FLASHLIGHT_HEIGHT = 11;  // больше не используется
-        const HORIZONTAL_RADIUS = 14;  // не используется
-        const VERTICAL_RADIUS = Math.floor(FLASHLIGHT_HEIGHT / 2); // не используется
-        const FLASHLIGHT_WIDTH = HORIZONTAL_RADIUS * 2 + 1; // не используется
-
         const ROUND_SECONDS = 25;
         const MAX_ATTEMPTS = 3;
-        const LEADERBOARD_KEY = 'codeguessr_leaderboard_v1';
+        const AUTH_TOKEN_KEY = 'codeguessr_auth_token_v1';
         const LANGUAGE_OPTIONS = [
             'JavaScript', 'TypeScript', 'Python', 'Ruby', 'Java', 'Kotlin',
             'C#', 'C', 'C++', 'PHP', 'Rust', 'Swift', 'Go', 'Lua',
@@ -471,9 +523,10 @@
             leaderboard: {},
             leaderboardLanguage: 'JavaScript',
             attemptsUsed: 0,
-            // NEW: параметры размера окна
             horzRadius: 14,
-            vertRadius: 5
+            vertRadius: 5,
+            token: '',
+            username: ''
         };
 
         const statusEl = document.getElementById('status');
@@ -492,6 +545,15 @@
         const leaderboardLanguageEl = document.getElementById('leaderboardLanguage');
         const leaderboardListEl = document.getElementById('leaderboardList');
         const clearLeaderboardBtn = document.getElementById('clearLeaderboardBtn');
+        const leaderboardTitleEl = document.querySelector('.leaderboard-title');
+
+        const authUsernameEl = document.getElementById('authUsername');
+        const authPasswordEl = document.getElementById('authPassword');
+        const registerBtn = document.getElementById('registerBtn');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const authUserEl = document.getElementById('authUser');
+        const authRowEl = authUsernameEl.closest('.auth-row');
 
         function escapeHtml(value) {
             return value
@@ -527,10 +589,128 @@
             return /[0-9]/.test(ch);
         }
 
+        function emptyLeaderboard() {
+            const board = {};
+            for (const lang of LANGUAGE_OPTIONS) board[lang] = [];
+            return board;
+        }
+
+        function normalizeLeaderboard(rawBoard) {
+            const board = emptyLeaderboard();
+            if (!rawBoard || typeof rawBoard !== 'object') return board;
+            for (const lang of LANGUAGE_OPTIONS) {
+                const entries = Array.isArray(rawBoard[lang]) ? rawBoard[lang] : [];
+                board[lang] = entries
+                    .filter(entry => entry && Number.isFinite(entry.score) && Number.isFinite(entry.timeLeft))
+                    .map(entry => ({
+                        username: typeof entry.username === 'string' ? entry.username : 'unknown',
+                        score: Math.floor(entry.score),
+                        timeLeft: Math.floor(entry.timeLeft),
+                        round: Number.isFinite(entry.round) ? Math.floor(entry.round) : 0,
+                        at: Number.isFinite(entry.at) ? entry.at : Date.now()
+                    }))
+                    .sort((a, b) => b.score - a.score || b.timeLeft - a.timeLeft || a.at - b.at)
+                    .slice(0, 10);
+            }
+            return board;
+        }
+
+        function clearGameView() {
+            state.lines = [''];
+            state.line = 0;
+            state.col = 0;
+            state.preferredCol = 0;
+            state.roundActive = false;
+            state.timeLeft = ROUND_SECONDS;
+            answerEl.textContent = '';
+            stopTimer();
+            renderAll();
+        }
+
+        function setAuthSession(token, username) {
+            state.token = token;
+            state.username = username;
+            if (token) {
+                localStorage.setItem(AUTH_TOKEN_KEY, token);
+            } else {
+                localStorage.removeItem(AUTH_TOKEN_KEY);
+            }
+            syncAuthUi();
+        }
+
+        function syncAuthUi() {
+            const authed = Boolean(state.token && state.username);
+            authUserEl.textContent = authed ? `Игрок: ${state.username}` : 'Не авторизован';
+            if (authRowEl) authRowEl.style.display = authed ? 'none' : '';
+            registerBtn.style.display = authed ? 'none' : '';
+            loginBtn.style.display = authed ? 'none' : '';
+            logoutBtn.style.display = authed ? '' : 'none';
+            clearLeaderboardBtn.disabled = !authed;
+            leaderboardLanguageEl.disabled = false;
+            leaderboardTitleEl.textContent = 'Общий лидерборд';
+        }
+
+        async function api(path, options = {}) {
+            const headers = new Headers(options.headers || {});
+            const hasBody = options.body !== undefined;
+            if (hasBody && !headers.has('Content-Type')) {
+                headers.set('Content-Type', 'application/json');
+            }
+            if (state.token) {
+                headers.set('Authorization', `Bearer ${state.token}`);
+            }
+
+            const response = await fetch(path, { ...options, headers });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const message = payload && typeof payload.error === 'string'
+                    ? payload.error
+                    : `HTTP ${response.status}`;
+                const error = new Error(message);
+                error.status = response.status;
+                throw error;
+            }
+            return payload;
+        }
+
+        async function loadLeaderboard() {
+            try {
+                const payload = await api('/api/leaderboard');
+                state.leaderboard = normalizeLeaderboard(payload?.leaderboard);
+                renderLeaderboard();
+            } catch (error) {
+                if (error.status === 401 && state.token) {
+                    handleAuthExpired();
+                    return;
+                }
+                renderStatus(`Ошибка таблицы: ${error.message}`, 'bad');
+            }
+        }
+
+        async function addLeaderboardEntry(language, score, timeLeft) {
+            if (!state.token) return;
+            await api('/api/leaderboard/entry', {
+                method: 'POST',
+                body: JSON.stringify({ language, score, timeLeft, round: state.round })
+            });
+        }
+
+        async function clearLeaderboard() {
+            if (!state.token) return;
+            await api('/api/leaderboard', { method: 'DELETE' });
+            state.leaderboard = emptyLeaderboard();
+            renderLeaderboard();
+        }
+
         function tokenize(line) {
             const tokens = [];
             let i = 0;
-
             while (i < line.length) {
                 const ch = line[i];
                 const next2 = line.slice(i, i + 2);
@@ -539,7 +719,6 @@
                     tokens.push({ type: 'comment', text: line.slice(i), start: i, end: line.length });
                     break;
                 }
-
                 if (ch === '#') {
                     const language = state.language.toLowerCase();
                     const pythonStyleHashComment = language === 'python';
@@ -549,7 +728,6 @@
                         break;
                     }
                 }
-
                 if (ch === '"' || ch === "'" || ch === '`') {
                     const quote = ch;
                     let j = i + 1;
@@ -568,15 +746,13 @@
                     i = j;
                     continue;
                 }
-
                 if (isDigit(ch)) {
                     let j = i + 1;
-                    while (j < line.length && /[0-9A-Fa-f_xX\.]/.test(line[j])) j += 1;
+                    while (j < line.length && /[0-9A-Fa-f_xX.]/.test(line[j])) j += 1;
                     tokens.push({ type: 'number', text: line.slice(i, j), start: i, end: j });
                     i = j;
                     continue;
                 }
-
                 if (isLetter(ch) || ch === '$') {
                     let j = i + 1;
                     while (j < line.length && /[A-Za-z0-9_$]/.test(line[j])) j += 1;
@@ -593,7 +769,6 @@
                     i = j;
                     continue;
                 }
-
                 if (/[+\-*\/%=!<>|&^~?:]/.test(ch)) {
                     let j = i + 1;
                     while (j < line.length && /[+\-*\/%=!<>|&^~?:]/.test(line[j])) j += 1;
@@ -605,7 +780,6 @@
                 tokens.push({ type: 'plain', text: ch, start: i, end: i + 1 });
                 i += 1;
             }
-
             return tokens;
         }
 
@@ -615,50 +789,36 @@
             return `<span class="${cls}">${escapeHtml(text)}</span>`;
         }
 
-        // NEW: функция buildFlashlightWindow теперь принимает радиус как аргумент
         function buildFlashlightWindow(line, centerCol, radius) {
             const width = radius * 2 + 1;
             let out = '';
-
             for (let i = 0; i < width; i += 1) {
                 const absoluteCol = centerCol - radius + i;
-                if (absoluteCol < 0 || absoluteCol >= line.length) {
-                    out += ' ';
-                } else {
-                    out += line[absoluteCol];
-                }
+                out += absoluteCol >= 0 && absoluteCol < line.length ? line[absoluteCol] : ' ';
             }
-
             return out;
         }
 
         function renderHighlightedSegment(segment, focusIndex, forceCursor = false) {
-            if (!segment) {
-                return forceCursor ? '<span class="current">&nbsp;</span>' : '';
-            }
+            if (!segment) return forceCursor ? '<span class="current">&nbsp;</span>' : '';
 
             const tokens = tokenize(segment);
             let html = '';
-
             for (const token of tokens) {
                 const inToken = focusIndex >= token.start && focusIndex < token.end;
                 if (!inToken) {
                     html += renderTokenText(token.text, token.type);
                     continue;
                 }
-
                 const local = focusIndex - token.start;
                 const before = token.text.slice(0, local);
                 const cur = token.text[local] ?? ' ';
                 const after = token.text.slice(local + 1);
-
                 html += renderTokenText(before, token.type);
                 const cls = tokenClass(token.type);
-                const tokenClassTail = cls ? ` ${cls}` : '';
-                html += `<span class="current${tokenClassTail}">${renderCurrentChar(cur)}</span>`;
+                html += `<span class="current${cls ? ` ${cls}` : ''}">${renderCurrentChar(cur)}</span>`;
                 html += renderTokenText(after, token.type);
             }
-
             if (forceCursor && (focusIndex < 0 || focusIndex >= segment.length)) {
                 html += '<span class="current">&nbsp;</span>';
             }
@@ -686,59 +846,11 @@
             timerFillEl.style.width = `${percent}%`;
         }
 
-        function emptyLeaderboard() {
-            const board = {};
-            for (const lang of LANGUAGE_OPTIONS) board[lang] = [];
-            return board;
-        }
-
-        function loadLeaderboard() {
-            try {
-                const raw = localStorage.getItem(LEADERBOARD_KEY);
-                const parsed = raw ? JSON.parse(raw) : {};
-                const board = emptyLeaderboard();
-                for (const lang of LANGUAGE_OPTIONS) {
-                    const entries = Array.isArray(parsed[lang]) ? parsed[lang] : [];
-                    board[lang] = entries
-                        .filter(e => e && Number.isFinite(e.score) && Number.isFinite(e.timeLeft))
-                        .map(e => ({
-                            score: Math.floor(e.score),
-                            timeLeft: Math.floor(e.timeLeft),
-                            round: Number.isFinite(e.round) ? Math.floor(e.round) : 0,
-                            at: Number.isFinite(e.at) ? e.at : Date.now()
-                        }))
-                        .sort((a, b) => b.score - a.score || b.timeLeft - a.timeLeft || a.at - b.at)
-                        .slice(0, 10);
-                }
-                return board;
-            } catch {
-                return emptyLeaderboard();
-            }
-        }
-
-        function saveLeaderboard() {
-            localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(state.leaderboard));
-        }
-
-        function addLeaderboardEntry(language, score, timeLeft) {
-            if (!state.leaderboard[language]) state.leaderboard[language] = [];
-            state.leaderboard[language].push({
-                score,
-                timeLeft,
-                round: state.round,
-                at: Date.now()
-            });
-            state.leaderboard[language].sort((a, b) => b.score - a.score || b.timeLeft - a.timeLeft || a.at - b.at);
-            state.leaderboard[language] = state.leaderboard[language].slice(0, 10);
-            saveLeaderboard();
-        }
-
         function renderLeaderboardSelector() {
             const langs = [...LANGUAGE_OPTIONS].sort((a, b) => a.localeCompare(b));
             leaderboardLanguageEl.innerHTML = langs
                 .map(lang => `<option value="${escapeHtml(lang)}">${escapeHtml(lang)}</option>`)
                 .join('');
-
             if (!langs.includes(state.leaderboardLanguage)) {
                 state.leaderboardLanguage = langs[0] || 'JavaScript';
             }
@@ -748,18 +860,15 @@
         function renderLeaderboardList() {
             const language = state.leaderboardLanguage;
             const items = state.leaderboard[language] || [];
-
             if (items.length === 0) {
                 leaderboardListEl.innerHTML = '<div class="leaderboard-empty">Пока нет результатов для этого языка</div>';
                 return;
             }
-
-            const rows = items.map((entry, idx) => {
+            leaderboardListEl.innerHTML = items.map((entry, idx) => {
                 const rank = idx + 1;
                 const when = new Date(entry.at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-                return `<div class="leaderboard-row"><span>#${rank}</span><span>Раунд ${entry.round}</span><strong>${entry.score}</strong><span>${entry.timeLeft}с • ${when}</span></div>`;
-            });
-            leaderboardListEl.innerHTML = rows.join('');
+                return `<div class="leaderboard-row"><span>#${rank}</span><span>${escapeHtml(entry.username)}</span><span>R${entry.round}</span><strong>${entry.score}</strong><span>${entry.timeLeft}с • ${when}</span></div>`;
+            }).join('');
         }
 
         function renderLeaderboard() {
@@ -799,7 +908,6 @@
 
         function renderCode() {
             clampPosition();
-
             if (state.lines.length === 0) {
                 lineEl.innerHTML = '<span class="current">&nbsp;</span>';
                 contextBlockEl.innerHTML = '<div class="context-block-content">∅</div>';
@@ -807,36 +915,28 @@
             }
 
             const currentLine = state.lines[state.line];
-            const hasChars = state.col < currentLine.length;
-            const colShown = state.col;
-
-            if (hasChars) {
-                lineEl.innerHTML = renderHighlightedSegment(currentLine, colShown, true);
+            if (state.col < currentLine.length) {
+                lineEl.innerHTML = renderHighlightedSegment(currentLine, state.col, true);
             } else {
                 lineEl.innerHTML = '<span class="current">&nbsp;</span>';
             }
 
-            // NEW: используем state.vertRadius для определения вертикальных границ
             const top = Math.max(0, state.line - state.vertRadius);
             const bottom = Math.min(state.lines.length - 1, state.line + state.vertRadius);
             const rows = [];
-
             for (let row = top; row <= bottom; row += 1) {
                 const rawLine = state.lines[row];
                 const marker = row === state.line ? '>' : ' ';
                 const rowNum = String(row + 1).padStart(4, ' ');
                 const prefix = `${marker}${rowNum} | `;
-                const suffix = ' '.repeat(prefix.length);
-                // NEW: передаём текущий горизонтальный радиус
                 const local = buildFlashlightWindow(rawLine, state.col, state.horzRadius);
                 const localHtml = row === state.line
                     ? renderHighlightedSegment(local, state.horzRadius, true)
                     : renderHighlightedSegment(local, -1, false);
-                rows.push(`<div><span class="row-prefix">${escapeHtml(prefix)}</span>${localHtml}${escapeHtml(suffix)}</div>`);
+                rows.push(`<div><span class="row-prefix">${escapeHtml(prefix)}</span>${localHtml}</div>`);
             }
 
-            contextBlockEl.innerHTML =
-                `<div class="context-block-content">${rows.join('')}</div>`;
+            contextBlockEl.innerHTML = `<div class="context-block-content">${rows.join('')}</div>`;
         }
 
         function renderAll() {
@@ -851,7 +951,7 @@
             }
         }
 
-        function finishRound(correct, guessed, reason = '') {
+        async function finishRound(correct, guessed, reason = '') {
             state.roundActive = false;
             stopTimer();
 
@@ -859,10 +959,25 @@
                 const bonus = 100 + state.timeLeft * 6;
                 state.score += bonus;
                 state.streak += 1;
-                addLeaderboardEntry(state.language, bonus, state.timeLeft);
                 state.leaderboardLanguage = state.language;
-                renderStatus(`Верно! +${bonus} очков`, 'ok');
+                if (state.token) {
+                    renderStatus(`Верно! +${bonus} очков`, 'ok');
+                } else {
+                    renderStatus(`Верно! +${bonus} очков (анонимно, в лидерборд не записывается)`, 'ok');
+                }
                 answerEl.textContent = `Ответ: ${state.language}`;
+                if (state.token) {
+                    try {
+                        await addLeaderboardEntry(state.language, bonus, state.timeLeft);
+                        await loadLeaderboard();
+                    } catch (error) {
+                        if (error.status === 401) {
+                            handleAuthExpired();
+                            return;
+                        }
+                        renderStatus(`Ошибка сохранения: ${error.message}`, 'bad');
+                    }
+                }
             } else {
                 state.streak = 0;
                 if (reason === 'attempts') {
@@ -882,7 +997,6 @@
                     btn.classList.add('wrong');
                 }
             }
-
             renderHud();
             renderLeaderboard();
         }
@@ -895,7 +1009,7 @@
                 if (state.timeLeft <= 0) {
                     state.timeLeft = 0;
                     renderHud();
-                    finishRound(false, null, 'time');
+                    void finishRound(false, null, 'time');
                     return;
                 }
                 renderHud();
@@ -904,15 +1018,13 @@
 
         function handleGuess(lang) {
             if (!state.roundActive) return;
-
             if (lang === state.language) {
-                finishRound(true, lang);
+                void finishRound(true, lang);
                 return;
             }
 
             state.attemptsUsed += 1;
             const attemptsLeft = Math.max(0, MAX_ATTEMPTS - state.attemptsUsed);
-
             for (const btn of getChoiceButtons()) {
                 const val = btn.getAttribute('data-lang');
                 btn.classList.remove('wrong');
@@ -920,10 +1032,9 @@
             }
 
             if (state.attemptsUsed >= MAX_ATTEMPTS) {
-                finishRound(false, lang, 'attempts');
+                void finishRound(false, lang, 'attempts');
                 return;
             }
-
             renderStatus(`Нет, это не ${lang}. Осталось попыток: ${attemptsLeft}`, 'bad');
         }
 
@@ -948,16 +1059,6 @@
             state.col = state.preferredCol;
         }
 
-        // NEW: изменение размера окна
-        function changeFlashlightSize(deltaHorz, deltaVert) {
-            const newHorz = state.horzRadius + deltaHorz;
-            const newVert = state.vertRadius + deltaVert;
-            if (newHorz < 1 || newHorz > 30 || newVert < 1 || newVert > 15) return; // разумные пределы
-            state.horzRadius = newHorz;
-            state.vertRadius = newVert;
-            renderCode();
-        }
-
         function setRandomStartPosition() {
             if (state.lines.length === 0) {
                 state.line = 0;
@@ -971,43 +1072,114 @@
             state.preferredCol = state.col;
         }
 
-        function loadRandomCode() {
+        function handleAuthExpired() {
+            setAuthSession('', '');
+            void loadLeaderboard();
+            clearGameView();
+            renderStatus('Сессия истекла. Можно войти снова или играть анонимно.', 'bad');
+        }
+
+        async function loadRandomCode() {
             stopTimer();
             renderStatus('Загрузка нового раунда...');
             answerEl.textContent = 'Ответ скрыт до конца раунда';
 
-            fetch('/api/random-code')
-                .then(response => {
-                    if (!response.ok) throw new Error('Не удалось получить случайный код');
-                    return response.json();
-                })
-                .then(payload => {
-                    const text = typeof payload.code === 'string' ? payload.code : '';
-                    state.language = typeof payload.language === 'string' ? payload.language : 'Unknown';
-                    state.lines = text.split(/\r?\n/);
-                    if (state.lines.length === 0) state.lines = [''];
+            try {
+                const payload = await api('/api/random-code');
+                const text = typeof payload?.code === 'string' ? payload.code : '';
+                state.language = typeof payload?.language === 'string' ? payload.language : 'Unknown';
+                state.lines = text.split(/\r?\n/);
+                if (state.lines.length === 0) state.lines = [''];
 
-                    state.round += 1;
-                    state.timeLeft = ROUND_SECONDS;
-                    state.roundActive = true;
-                    state.attemptsUsed = 0;
-                    setRandomStartPosition();
+                state.round += 1;
+                state.timeLeft = ROUND_SECONDS;
+                state.roundActive = true;
+                state.attemptsUsed = 0;
+                setRandomStartPosition();
 
-                    renderChoices();
-                    renderStatus('Раунд начался. Выбери язык как можно быстрее.');
-                    renderAll();
-                    startTimer();
-                })
-                .catch(error => {
-                    state.roundActive = false;
-                    renderStatus(`Ошибка: ${error.message}`, 'bad');
-                    lineEl.textContent = '';
-                    contextBlockEl.textContent = '';
-                    answerEl.textContent = '';
-                });
+                renderChoices();
+                renderStatus('Раунд начался. Выбери язык как можно быстрее.');
+                renderAll();
+                startTimer();
+            } catch (error) {
+                if (error.status === 401) {
+                    handleAuthExpired();
+                    return;
+                }
+                state.roundActive = false;
+                renderStatus(`Ошибка: ${error.message}`, 'bad');
+                lineEl.textContent = '';
+                contextBlockEl.textContent = '';
+                answerEl.textContent = '';
+            }
         }
 
-        newSampleBtn.addEventListener('click', loadRandomCode);
+        async function submitAuth(mode) {
+            const username = authUsernameEl.value.trim();
+            const password = authPasswordEl.value;
+            if (!username || !password) {
+                renderStatus('Введите логин и пароль', 'bad');
+                return;
+            }
+
+            try {
+                const payload = await api(`/api/${mode}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
+                const token = typeof payload?.token === 'string' ? payload.token : '';
+                const name = typeof payload?.username === 'string' ? payload.username : '';
+                if (!token || !name) throw new Error('Некорректный ответ сервера');
+
+                setAuthSession(token, name);
+                authPasswordEl.value = '';
+                state.score = 0;
+                state.streak = 0;
+                state.round = 0;
+                state.leaderboardLanguage = 'JavaScript';
+                await loadLeaderboard();
+                renderStatus(mode === 'register' ? 'Регистрация выполнена' : 'Вход выполнен', 'ok');
+            } catch (error) {
+                renderStatus(`Ошибка: ${error.message}`, 'bad');
+            }
+        }
+
+        async function logout() {
+            try {
+                if (state.token) {
+                    await api('/api/logout', { method: 'POST' });
+                }
+            } catch {
+                // noop
+            }
+            setAuthSession('', '');
+            await loadLeaderboard();
+            clearGameView();
+            renderStatus('Вы вышли из аккаунта. Можно играть анонимно.', 'ok');
+        }
+
+        newSampleBtn.addEventListener('click', () => {
+            void loadRandomCode();
+        });
+
+        registerBtn.addEventListener('click', () => {
+            void submitAuth('register');
+        });
+
+        loginBtn.addEventListener('click', () => {
+            void submitAuth('login');
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            void logout();
+        });
+
+        authPasswordEl.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                void submitAuth('login');
+            }
+        });
 
         leaderboardLanguageEl.addEventListener('change', () => {
             state.leaderboardLanguage = leaderboardLanguageEl.value;
@@ -1015,9 +1187,7 @@
         });
 
         clearLeaderboardBtn.addEventListener('click', () => {
-            state.leaderboard = emptyLeaderboard();
-            saveLeaderboard();
-            renderLeaderboard();
+            void clearLeaderboard();
         });
 
         toggleTopPanelBtn.addEventListener('click', () => {
@@ -1027,26 +1197,19 @@
         });
 
         function handleGlobalKeyDown(event) {
+            const active = document.activeElement;
+            const typingTarget = active && (
+                active.tagName === 'INPUT' ||
+                active.tagName === 'TEXTAREA' ||
+                active.isContentEditable
+            );
+            if (typingTarget) return;
+
             if (event.code === 'KeyN' || event.key.toLowerCase() === 'n') {
                 event.preventDefault();
-                loadRandomCode();
+                void loadRandomCode();
                 return;
             }
-
-            // NEW: обработка Shift+стрелки для изменения размера окна
-            if (event.shiftKey) {
-                if (event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    changeFlashlightSize(1, 1);
-                    return;
-                }
-                if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    changeFlashlightSize(-1, -1);
-                    return;
-                }
-            }
-
             const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
             if (!keys.includes(event.key)) return;
             event.preventDefault();
@@ -1059,12 +1222,36 @@
         }
         window.addEventListener('keydown', handleGlobalKeyDown);
 
-        state.leaderboard = loadLeaderboard();
-        updateDebugButtonLabel();
-        renderChoices();
-        renderLeaderboard();
-        renderAll();
-        loadRandomCode();
+        async function bootstrap() {
+            state.leaderboard = emptyLeaderboard();
+            updateDebugButtonLabel();
+            renderChoices();
+            renderLeaderboard();
+            renderAll();
+
+            const savedToken = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+            if (!savedToken) {
+                syncAuthUi();
+                await loadLeaderboard();
+                renderStatus('Нажмите "Новый раунд" для анонимной игры или войдите для таблицы.', 'ok');
+                return;
+            }
+
+            state.token = savedToken;
+            syncAuthUi();
+            try {
+                const payload = await api('/api/me');
+                const username = typeof payload?.username === 'string' ? payload.username : '';
+                if (!username) throw new Error('Пустой пользователь');
+                setAuthSession(savedToken, username);
+                await loadLeaderboard();
+                renderStatus(`С возвращением, ${username}. Нажмите "Новый раунд".`, 'ok');
+            } catch {
+                handleAuthExpired();
+            }
+        }
+
+        void bootstrap();
     </script>
 </body>
 </html>
