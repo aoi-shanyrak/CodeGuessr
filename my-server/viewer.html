@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>CodeGuessr — редакторный просмотр</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            font-family: 'Segoe UI', 'Courier New', monospace;
+            background: #f0f0f0;  /* светлая тема, как в блокноте */
+            color: #000;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.2rem;
+            color: #111;
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+        .info-panel {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+            background: #fff;
+            padding: 0.5rem 2rem;
+            border-radius: 30px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        .info-item {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .info-label {
+            color: #666;
+        }
+        .info-value {
+            color: #0066cc;
+            font-weight: bold;
+        }
+        /* Контейнер в стиле блокнота */
+        .notepad {
+            background: white;
+            border: 1px solid #ccc;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            padding: 10px 0 10px 0;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            font-family: 'Consolas', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 1.4rem;
+            line-height: 1.5;
+            background: white;
+            margin: 0 auto;
+        }
+        td {
+            padding: 0 0.2rem;
+            white-space: pre;
+        }
+        /* Номера строк */
+        .line-numbers {
+            color: #2b91af;      /* синий, как в Visual Studio */
+            text-align: right;
+            padding: 0 0.8rem 0 1.2rem;
+            border-right: 1px solid #ccc;
+            background: #f9f9f9;
+            font-weight: normal;
+        }
+        /* Ячейки с кодом */
+        .code-cell {
+            color: black;
+            min-width: 1.8rem;
+            text-align: center;
+            background: white;
+            border: none;
+        }
+        .code-cell.highlight-center {
+            background: #e6f3ff;
+            border: 2px solid #1e90ff;
+            border-radius: 3px;
+        }
+        .controls {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+        }
+        button {
+            background: #e0e0e0;
+            color: #000;
+            border: 1px solid #aaa;
+            font-size: 2rem;
+            width: 70px;
+            height: 70px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.1s;
+            box-shadow: 0 3px 0 #888;
+        }
+        button:hover {
+            background: #d0d0d0;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 0 #888;
+        }
+        button:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #888;
+        }
+        .footer {
+            margin-top: 1.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>📄 CodeGuessr</h1>
+    <div class="subtitle">фрагмент кода 9×9 (как в блокноте)</div>
+
+    <div class="info-panel">
+        <div class="info-item"><span class="info-label">Центр:</span><span class="info-value" id="coords">5:5</span></div>
+        <div class="info-item"><span class="info-label">Всего строк:</span><span class="info-value" id="totalRows">?</span></div>
+    </div>
+
+    <div class="notepad">
+        <table id="code-grid">
+            <!-- Здесь JavaScript создаст строки -->
+        </table>
+    </div>
+
+    <div class="controls">
+        <button id="up">↑</button>
+        <button id="left">←</button>
+        <button id="down">↓</button>
+        <button id="right">→</button>
+    </div>
+
+    <div class="footer">← ↑ → ↓ или стрелки на клавиатуре • центр выделен синей рамкой</div>
+
+    <script>
+        const WINDOW_SIZE = 9;
+        const HALF = 4; // (9-1)/2
+
+        let currentRow = 5;
+        let currentCol = 5;
+        let totalRows = 0;
+
+        const gridElement = document.getElementById('code-grid');
+
+        // Создаём таблицу 9x9 + столбец с номерами строк
+        function buildGrid() {
+            let html = '';
+            for (let r = 0; r < WINDOW_SIZE; r++) {
+                html += '<tr>';
+                // Номер строки (будет обновляться динамически)
+                html += `<td class="line-numbers" id="line-${r}">${r + 1}</td>`;
+                // Ячейки с символами
+                for (let c = 0; c < WINDOW_SIZE; c++) {
+                    html += `<td class="code-cell" id="cell-${r}-${c}"> </td>`;
+                }
+                html += '</tr>';
+            }
+            gridElement.innerHTML = html;
+        }
+        buildGrid();
+
+        // Обновить сетку данными с сервера
+        async function fetchWindow(row, col) {
+            const url = `/api/window?row=${row}&col=${col}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Ошибка сервера');
+                const data = await response.json();
+                updateGrid(data.window);
+                document.getElementById('coords').innerText = `${data.centerRow}:${data.centerCol}`;
+                document.getElementById('totalRows').innerText = data.totalRows;
+                totalRows = data.totalRows;
+            } catch (err) {
+                console.error(err);
+                alert('Не удалось загрузить данные');
+            }
+        }
+
+        // Заполнить ячейки символами и обновить номера строк
+        function updateGrid(windowMatrix) {
+            // Обновить номера строк (они зависят от текущего центра)
+            for (let r = 0; r < WINDOW_SIZE; r++) {
+                const lineNumberEl = document.getElementById(`line-${r}`);
+                const fileRow = currentRow - HALF + r; // строка в файле (1‑индексация)
+                if (fileRow >= 1 && fileRow <= totalRows) {
+                    lineNumberEl.textContent = fileRow;
+                } else {
+                    lineNumberEl.textContent = '·'; // за границами файла
+                }
+            }
+
+            // Обновить символы
+            for (let r = 0; r < WINDOW_SIZE; r++) {
+                for (let c = 0; c < WINDOW_SIZE; c++) {
+                    const cell = document.getElementById(`cell-${r}-${c}`);
+                    const ch = windowMatrix[r][c];
+                    // Пробел оставляем пустым (или можно показать · для наглядности, но в блокноте пробел невидим)
+                    cell.textContent = ch === ' ' ? ' ' : ch;
+                    cell.classList.remove('highlight-center');
+                }
+            }
+            // Подсветить центральную ячейку
+            document.getElementById(`cell-${HALF}-${HALF}`).classList.add('highlight-center');
+        }
+
+        // Обработчики кнопок
+        document.getElementById('up').addEventListener('click', () => {
+            currentRow = Math.max(1, currentRow - 1);
+            fetchWindow(currentRow, currentCol);
+        });
+        document.getElementById('down').addEventListener('click', () => {
+            currentRow = currentRow + 1;
+            fetchWindow(currentRow, currentCol);
+        });
+        document.getElementById('left').addEventListener('click', () => {
+            currentCol = Math.max(1, currentCol - 1);
+            fetchWindow(currentRow, currentCol);
+        });
+        document.getElementById('right').addEventListener('click', () => {
+            currentCol = currentCol + 1;
+            fetchWindow(currentRow, currentCol);
+        });
+
+        // Клавиши-стрелки
+        window.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                    e.preventDefault();
+                    currentRow = Math.max(1, currentRow - 1);
+                    fetchWindow(currentRow, currentCol);
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    currentRow = currentRow + 1;
+                    fetchWindow(currentRow, currentCol);
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    currentCol = Math.max(1, currentCol - 1);
+                    fetchWindow(currentRow, currentCol);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    currentCol = currentCol + 1;
+                    fetchWindow(currentRow, currentCol);
+                    break;
+            }
+        });
+
+        // Старт
+        fetchWindow(currentRow, currentCol);
+    </script>
+</body>
+</html>
